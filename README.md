@@ -2,4 +2,7 @@ idea taken from @inotflying (https://github.com/inotflying/mcbe-new-play-screen-
 but i automated and a bit improved his program
 
 ps: You MUST have minecraft installed NOT in windows folder, basicaly you can use jiayi, bedrock launcher or some other version switchers
+https://github.com/JiayiSoftware/JiayiLauncher
+https://github.com/BedrockLauncher/BedrockLauncher
+
 reason: you cant patch anything in system folder(( i mean u prob can but program will be detected as virus 
