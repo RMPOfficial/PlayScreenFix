@@ -4,6 +4,8 @@
 #include <fstream>
 #include <vector>
 #include <algorithm>
+#include <appmodel.h>
+#include <shobjidl_core.h>
 
 const std::string target = "mc-ab-new-play-screen-";
 
@@ -29,34 +31,58 @@ static int getMinecraftPID()
     return 0;
 }
 
-static std::string executeCommand(const std::string& command)
+std::wstring PackageFullNameFromFamilyName(std::wstring familyName)
 {
-    std::string result;
-    FILE* pipe = _popen(command.c_str(), "r");
-    char buffer[128];
+    std::wstring fullName;
+    UINT32 count = 0;
+    UINT32 length = 0;
 
-    if (!pipe) return "Error";
+    // First call gets the count and length; PACKAGE_FILTER_HEAD tells Windows to query Application Packages
+    LONG status = FindPackagesByPackageFamily(familyName.c_str(), PACKAGE_FILTER_HEAD, &count, nullptr, &length, nullptr, nullptr);
+    if (status == ERROR_SUCCESS || status != ERROR_INSUFFICIENT_BUFFER)
+        return fullName;
 
-    while (fgets(buffer, sizeof(buffer), pipe)) {
-        result += buffer;
-    }
+    PWSTR* fullNames = (PWSTR*)malloc(count * sizeof(*fullNames));
+    PWSTR buffer = (PWSTR)malloc(length * sizeof(WCHAR));
+    UINT32* properties = (UINT32*)malloc(count * sizeof(*properties));
 
-    _pclose(pipe);
 
-    // this is needed cuz PowerShell command result has \n at the end
-    result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
+    if (buffer == nullptr || fullNames == nullptr || properties == nullptr)
+        goto Cleanup;
 
-    return result;
+
+    // Second call gets all fullNames
+    // buffer and properties are needed even though they're never used
+    status = FindPackagesByPackageFamily(familyName.c_str(), PACKAGE_FILTER_HEAD, &count, fullNames, &length, buffer, properties);
+    if (status != ERROR_SUCCESS)
+        goto Cleanup;
+    else
+        fullName = std::wstring(fullNames[0]); // Get the first activatable package found; usually there is only one anyway
+
+Cleanup:
+    if (properties != nullptr)
+        free(properties);
+    if (buffer != nullptr)
+        free(buffer);
+    if (fullNames != nullptr)
+        free(fullNames);
+
+
+    return fullName;
 }
 
-std::string getMinecraftVersion(const std::string& exePath)
+std::wstring GetPackagePath(const std::wstring& packageFullName)
 {
-    std::string command = "powershell -Command \"(Get-Command '" + exePath + "').Version.ToString()\"";
-    std::string version = executeCommand(command);
-    if (version == "Error" || version.empty()) {
-        return "Unknown";
-    }
-    return version;
+    UINT32 pathLength = 0;
+    LONG rc = GetPackagePathByFullName(packageFullName.c_str(), &pathLength, NULL);
+    if (rc != ERROR_INSUFFICIENT_BUFFER && rc != ERROR_MORE_DATA)
+        return L"";
+    wchar_t* pathBuffer = new wchar_t[pathLength];
+    rc = GetPackagePathByFullName(packageFullName.c_str(), &pathLength, pathBuffer);
+    if (rc != ERROR_SUCCESS)
+        return L"";
+
+    return pathBuffer;
 }
 
 bool patch(const std::string& path)
@@ -90,6 +116,8 @@ bool patch(const std::string& path)
 
 int main()
 {
+    setlocale(LC_CTYPE, "");
+
     std::cout << "Welcome to improved version of OldPlayScreen patcher by @inotflying\nThanks to him for the bypass method\n\n";
 
     // making sure minecraft is not running rn, patching stuff at runtime is not cool and may cause ub
@@ -104,8 +132,7 @@ int main()
 
     std::cout << "Determining location of minecraft exe file...\n";
 
-    std::string minecraftPath = executeCommand("powershell -Command \"Get-AppxPackage Microsoft.MinecraftUWP | Select-Object -ExpandProperty InstallLocation\"") + "\\Minecraft.Windows.exe";
-
+    std::wstring minecraftPath = GetPackagePath((PackageFullNameFromFamilyName(L"Microsoft.MinecraftUWP_8wekyb3d8bbwe"))) + L"\\Minecraft.Windows.exe";
     if (minecraftPath.empty())
     {
         std::cout << "Minecraft's exe file was not found!\nPress any key to exit...\n";
@@ -113,31 +140,9 @@ int main()
         return -1;
     }
 
-    std::cout << "Minecraft exe found! Path: " << minecraftPath << std::endl;
-
-    // now we have to make sure mc ver is over or same as 1.21.50 since its a ver were first time was added new play screen
-
-    std::string minecraftVersion = getMinecraftVersion(minecraftPath);
-    std::string minVersion = "1.21.50";
-
-    if (minecraftVersion == "Unknown")
-    {
-        std::cout << "Unable to determine Minecraft version. Proceed with caution.\n";
-        std::cout << "Press any key to exit...\n";
-        std::cin.get();
-        return -1;
-    }
-    else if (minecraftVersion < minVersion)
-    {
-        std::cout << "Minecraft version " << minecraftVersion << " is lower than the required " << minVersion << "!\nPlease update Minecraft.\n";
-        std::cout << "Press any key to exit...\n";
-        std::cin.get();
-        return -2;
-    }
-
-    std::cout << "Minecraft version " << minecraftVersion << " is supported!\n";
-
-    if (!patch(minecraftPath))
+    std::wcout << "Minecraft exe found! Path: " << minecraftPath << std::endl;
+    std::string buf(minecraftPath.begin(), minecraftPath.end());
+    if (!patch(buf))
     {
         std::cout << "Patch is already applied!\nPress any key to exit...\n";
         std::cin.get();
@@ -145,7 +150,6 @@ int main()
     }
 
     std::cout << "Patch applied successfully.\n";
-    std::cout << "Press any key to exit...\n";
-    std::cin.get();
+    system("pause");
     return 0;
 }
