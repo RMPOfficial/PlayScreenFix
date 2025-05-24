@@ -6,25 +6,28 @@
 #include <algorithm>
 #include <appmodel.h>
 #include <shobjidl_core.h>
+#include <functional>
 
 const std::string target = "mc-ab-new-play-screen-";
+const std::string untarget = "justasimplestringabcde";
+const std::wstring systemfolder = L"WindowsApps";
 
 static int getMinecraftPID()
 {
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    PROCESSENTRY32 process;
+    PROCESSENTRY32W process;
     process.dwSize = sizeof(process);
 
-    if (Process32First(snapshot, &process))
+    if (Process32FirstW(snapshot, &process))
     {
         do
         {
-            if (strcmp(process.szExeFile, "Minecraft.Windows.exe") == 0)
+            if (wcscmp(process.szExeFile, L"Minecraft.Windows.exe") == 0)
             {
                 CloseHandle(snapshot);
                 return process.th32ProcessID;
             }
-        } while (Process32Next(snapshot, &process));
+        } while (Process32NextW(snapshot, &process));
     }
 
     CloseHandle(snapshot);
@@ -81,11 +84,36 @@ std::wstring GetPackagePath(const std::wstring& packageFullName)
     rc = GetPackagePathByFullName(packageFullName.c_str(), &pathLength, pathBuffer);
     if (rc != ERROR_SUCCESS)
         return L"";
-
+    
     return pathBuffer;
 }
 
-bool patch(const std::string& path)
+static bool contain(std::wstring str0, std::wstring str1) {
+    int8_t find = str0.find(str1);
+    if (find != std::string::npos) {
+        return true;
+    }
+    else return false;
+}
+
+static void computeLPS(const std::string& pat, std::vector<std::size_t>& lps) {
+    std::size_t m = pat.size();
+    lps.assign(m, 0);
+    std::size_t len = 0;
+    for (std::size_t i = 1; i < m; ) {
+        if (pat[i] == pat[len]) {
+            lps[i++] = ++len;
+        }
+        else if (len > 0) {
+            len = lps[len - 1];
+        }
+        else {
+            lps[i++] = 0;
+        }
+    }
+}
+
+bool patch(const std::string& path, bool& wpatch)
 {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     std::vector<char> data(file.tellg());
@@ -93,23 +121,43 @@ bool patch(const std::string& path)
     file.read(data.data(), data.size());
     file.close();
 
-    size_t targetLength = target.size();
-    bool found = false;
+    const std::string targetstr = wpatch ? target : untarget;
+    const std::string replacement = wpatch ? untarget : target;
+    std::size_t n = data.size();
+    std::size_t m = targetstr.size();
 
-    for (size_t i = 0; i <= data.size() - targetLength; i++)
-    {
-        if (std::equal(data.begin() + i, data.begin() + i + targetLength, target.begin()))
-        {
-            std::fill(data.begin() + i, data.begin() + i + targetLength, ' ');
-            found = true;
-            i += targetLength - 1;
+    std::vector<std::size_t> lps;
+    computeLPS(targetstr, lps);
+
+    bool found = false;
+    std::size_t i = 0;
+    std::size_t j = 0;
+    
+    while (i < n) {
+        if (data[i] == targetstr[j]) {
+            ++i; ++j;
+            if (j == m) {
+                std::copy(
+                    replacement.begin(), replacement.end(), data.begin() + (i - j)
+                );
+                found = true;
+                j = lps[j - 1];
+            }
+        }
+        else if (j > 0) {
+            j = lps[j - 1];
+        }
+        else {
+            ++i;
         }
     }
+
 
     if (!found) return false;
 
     std::ofstream outFile(path, std::ios::binary);
     outFile.write(data.data(), data.size());
+    outFile.close();
 
     return true;
 }
@@ -141,10 +189,55 @@ int main()
     }
 
     std::wcout << "Minecraft exe found! Path: " << minecraftPath << std::endl;
+
+    // Warning if minecraft path contains "WindowsApps"
+    if (contain(minecraftPath, systemfolder)) {
+        std::wcout << L"\nMinecraft is installed in a system path: " << minecraftPath << L", make sure you have the rights to access that folder or you ran this program as TrustedInstaller.\n";
+        char GetResponse[2];
+        std::cout << "Continue? [y/N]: ";
+        std::cin.get(GetResponse, 2);
+        while (GetResponse[0] != 'y' && GetResponse[0] != 'Y' && GetResponse[0] != 'n' && GetResponse[0] != 'N') {
+            std::cin.ignore(1000, '\n');
+            std::cout << "Enter a valid input: [y/N]: ";
+            std::cin.get(GetResponse, 2);
+        }
+        std::cin.ignore(1000, '\n');
+        if (GetResponse[0] == 'n' || GetResponse[0] == 'N') {
+            std::cout << "\nYou canceled the patch.\n";
+            std::cout << "\nPress any key to exit...\n";
+            std::cin.get();
+            return -5;
+        }
+        else std::cout << "Continuing the program.\n";
+    }
+
+    // Patch mode (patch, unpatch) and exit
+    bool willpatch;
+    std::cout << "\n1 = patch;\n2 = restore (if patched with this program);\n3 = exit\nYour choice: ";
+    char getresponse[2];
+    std::cin.get(getresponse, 2);
+    while (getresponse[0] != '1' && getresponse[0] != '2' && getresponse[0] != '3') {
+        std::cin.ignore(1000, '\n');
+        std::cout << "Enter a valid input [1/2/3]: ";
+        std::cin.get(getresponse, 2);
+        
+    }
+    std::cin.ignore(1000, '\n');
+    if (getresponse[0] == '1') willpatch = true;
+    else if (getresponse[0] == '2') willpatch = false;
+    else {
+        std::cout << "\nPress any key to exit...\n";
+        std::cin.get();
+        return 0;
+    }
+
     std::string buf(minecraftPath.begin(), minecraftPath.end());
-    if (!patch(buf))
+    if (!patch(buf, willpatch))
     {
-        std::cout << "Patch is already applied!\nPress any key to exit...\n";
+        if (willpatch) std::cout << "Patch is already applied!\n";
+        else std::cout << "Minecraft is already unpatched!\n";
+
+        std::cout << "Press any key to exit...\n";
         std::cin.get();
         return -3;
     }
