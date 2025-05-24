@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <appmodel.h>
 #include <shobjidl_core.h>
-#include <functional>
 
 const std::string target = "mc-ab-new-play-screen-";
 const std::string untarget = "justasimplestringabcde";
@@ -181,7 +180,7 @@ int main()
     std::cout << "Determining location of minecraft exe file...\n";
 
     std::wstring minecraftPath = GetPackagePath((PackageFullNameFromFamilyName(L"Microsoft.MinecraftUWP_8wekyb3d8bbwe"))) + L"\\Minecraft.Windows.exe";
-    if (minecraftPath.empty())
+    if (minecraftPath.empty() || minecraftPath == L"\\Minecraft.Windows.exe")
     {
         std::cout << "Minecraft's exe file was not found!\nPress any key to exit...\n";
         std::cin.get();
