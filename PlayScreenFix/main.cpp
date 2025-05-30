@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <appmodel.h>
 #include <shobjidl_core.h>
+#include <string>
 
 const std::string target = "mc-ab-new-play-screen-";
 const std::string untarget = "justasimplestringabcde";
@@ -87,7 +88,7 @@ std::wstring GetPackagePath(const std::wstring& packageFullName)
     return pathBuffer;
 }
 
-static bool contain(std::wstring str0, std::wstring str1) {
+static bool wcontain(std::wstring str0, std::wstring str1) {
     int8_t find = str0.find(str1);
     if (find != std::string::npos) {
         return true;
@@ -172,7 +173,7 @@ int main()
     if (getMinecraftPID() != 0)
     {
         std::cout << "Mincraft is currently running!\nPlease close the game and press any key to continue...\n";
-        std::cin.get();
+        system("pause");
     }
 
     // first - we need to get minecraft path
@@ -182,66 +183,66 @@ int main()
     std::wstring minecraftPath = GetPackagePath((PackageFullNameFromFamilyName(L"Microsoft.MinecraftUWP_8wekyb3d8bbwe"))) + L"\\Minecraft.Windows.exe";
     if (minecraftPath.empty() || minecraftPath == L"\\Minecraft.Windows.exe")
     {
-        std::cout << "Minecraft's exe file was not found!\nPress any key to exit...\n";
-        std::cin.get();
+        std::cout << "Minecraft's exe file was not found!\n";
+        system("pause");
         return -1;
     }
 
     std::wcout << "Minecraft exe found! Path: " << minecraftPath << std::endl;
 
-    // Warning if minecraft path contains "WindowsApps"
-    if (contain(minecraftPath, systemfolder)) {
-        std::wcout << L"\nMinecraft is installed in a system path: " << minecraftPath << L", make sure you have the rights to access that folder or you ran this program as TrustedInstaller.\n";
-        char GetResponse[2];
-        std::cout << "Continue? [y/N]: ";
-        std::cin.get(GetResponse, 2);
-        while (GetResponse[0] != 'y' && GetResponse[0] != 'Y' && GetResponse[0] != 'n' && GetResponse[0] != 'N') {
-            std::cin.ignore(1000, '\n');
-            std::cout << "Enter a valid input: [y/N]: ";
-            std::cin.get(GetResponse, 2);
-        }
-        std::cin.ignore(1000, '\n');
-        if (GetResponse[0] == 'n' || GetResponse[0] == 'N') {
-            std::cout << "\nYou canceled the patch.\n";
-            std::cout << "\nPress any key to exit...\n";
-            std::cin.get();
-            return -5;
-        }
-        else std::cout << "Continuing the program.\n";
+    // If minecraft path contains "WindowsApps"
+    if (wcontain(minecraftPath, systemfolder)) {
+        std::wcout << L"\nMinecraft is installed in a system path: " << minecraftPath << L".\nGo to the download page of Bedrock Launcher? ";
+        std::string Response;
+        std::cout << "[y/N]: ";
+        std::getline(std::cin, Response);
+        if (Response[0] != 'y' && Response[0] != 'Y' && Response[0] != 'n' && Response[0] != 'N') {
+            do {
+                std::cout << "Enter a valid input: [y/N] or ENTER to exit: ";
+                std::getline(std::cin, Response);
+            } while (!Response.empty() && Response[0] != 'y' && Response[0] != 'Y' && Response[0] != 'n' && Response[0] != 'N');
     }
 
-    // Patch mode (patch, unpatch) and exit
+        if (Response.empty() || Response[0] == 'n' || Response[0] == 'N') {
+            system("pause");
+            return -5;
+        }
+        else {
+            ShellExecuteW(0, 0, L"https://github.com/bedrockLauncher/BedrockLauncher/releases/latest/", 0, 0, SW_SHOW);
+            system("pause");
+            return -4;
+        }
+    }
+
+    // Patch mode (patch, unpatch and exit)
     bool willpatch;
     std::cout << "\n1 = patch;\n2 = restore (if patched with this program);\n3 = exit\nYour choice: ";
-    char getresponse[2];
-    std::cin.get(getresponse, 2);
-    while (getresponse[0] != '1' && getresponse[0] != '2' && getresponse[0] != '3') {
-        std::cin.ignore(1000, '\n');
-        std::cout << "Enter a valid input [1/2/3]: ";
-        std::cin.get(getresponse, 2);
-        
+
+    std::string response;
+    std::getline(std::cin, response);
+    if (response[0] != '1' && response[0] != '2' && response[0] != '3') {
+        do {
+            std::cout << "Enter a valid input: [1/2/3] or ENTER to exit: ";
+            std::getline(std::cin, response);
+        } while (!response.empty() && response[0] != '1' && response[0] != '2' && response[0] != '3');
     }
-    std::cin.ignore(1000, '\n');
-    if (getresponse[0] == '1') willpatch = true;
-    else if (getresponse[0] == '2') willpatch = false;
-    else {
-        std::cout << "\nPress any key to exit...\n";
-        std::cin.get();
+
+    if (response.empty() || response[0] == '3') {
+        system("pause");
         return 0;
     }
+    else if (response[0] == '2') willpatch = false;
+    else willpatch = true;
 
     std::string buf(minecraftPath.begin(), minecraftPath.end());
     if (!patch(buf, willpatch))
     {
-        if (willpatch) std::cout << "Patch is already applied!\n";
-        else std::cout << "Minecraft is already unpatched!\n";
+        std::cout << (willpatch ? "Patch is already applied!\n" : "Minecraft is already unpatched!\n");
 
-        std::cout << "Press any key to exit...\n";
-        std::cin.get();
+        system("pause");
         return -3;
     }
-
-    std::cout << "Patch applied successfully.\n";
+    std::cout << (willpatch ? "Patch applied successfully.\n" : "Successfully unpached.\n");
     system("pause");
     return 0;
 }
