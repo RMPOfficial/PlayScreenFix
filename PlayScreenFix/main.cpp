@@ -113,9 +113,12 @@ static void computeLPS(const std::string& pat, std::vector<std::size_t>& lps) {
     }
 }
 
-bool patch(const std::string& path, bool& wpatch)
+uint8_t patch(const std::wstring& path, bool& wpatch)
 {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        return 2;
+    }
     std::vector<char> data(file.tellg());
     file.seekg(0);
     file.read(data.data(), data.size());
@@ -153,13 +156,16 @@ bool patch(const std::string& path, bool& wpatch)
     }
 
 
-    if (!found) return false;
+    if (!found) return 1;
 
     std::ofstream outFile(path, std::ios::binary);
+    if (!outFile.is_open()) {
+        return 4;
+    }
     outFile.write(data.data(), data.size());
     outFile.close();
 
-    return true;
+    return 0;
 }
 
 int main()
@@ -181,7 +187,7 @@ int main()
     std::cout << "Determining location of minecraft exe file...\n";
 
     std::wstring minecraftPath = GetPackagePath((PackageFullNameFromFamilyName(L"Microsoft.MinecraftUWP_8wekyb3d8bbwe"))) + L"\\Minecraft.Windows.exe";
-    if (minecraftPath.empty() || minecraftPath == L"\\Minecraft.Windows.exe")
+    if (minecraftPath == L"\\Minecraft.Windows.exe")
     {
         std::cout << "Minecraft's exe file was not found!\n";
         system("pause");
@@ -201,7 +207,7 @@ int main()
                 std::cout << "Enter a valid input: [y/N] or ENTER to exit: ";
                 std::getline(std::cin, Response);
             } while (!Response.empty() && Response[0] != 'y' && Response[0] != 'Y' && Response[0] != 'n' && Response[0] != 'N');
-    }
+        }
 
         if (Response.empty() || Response[0] == 'n' || Response[0] == 'N') {
             system("pause");
@@ -234,14 +240,26 @@ int main()
     else if (response[0] == '2') willpatch = false;
     else willpatch = true;
 
-    std::string buf(minecraftPath.begin(), minecraftPath.end());
-    if (!patch(buf, willpatch))
+    std::wstring buf(minecraftPath.begin(), minecraftPath.end());
+    uint8_t patchresult = patch(buf, willpatch);
+    switch (patchresult)
     {
+    case 1:
         std::cout << (willpatch ? "Patch is already applied!\n" : "Minecraft is already unpatched!\n");
-
-        system("pause");
-        return -3;
+        break;
+    case 2:
+        std::cout << "Error opening file to read!\n";
+        break;
+    case 4:
+        std::cout << "Error opening file to read!\n";
+        break;
+    default:
+        goto end;
     }
+    system("pause");
+    return -3;
+
+    end:
     std::cout << (willpatch ? "Patch applied successfully.\n" : "Successfully unpached.\n");
     system("pause");
     return 0;
